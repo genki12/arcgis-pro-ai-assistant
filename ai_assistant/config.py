@@ -1,9 +1,9 @@
 """Persistent settings for the AI Assistant toolbox.
 
 Stored as plain JSON under %APPDATA%\\ArcGISProAIAssistant\\config.json. Only
-non-secret defaults belong here (model names, local server URLs) -- the
-Anthropic API key is read from the ANTHROPIC_API_KEY environment variable by
-default and should not be written to this file.
+non-secret defaults belong here (model names, server URLs) -- API keys are
+read from the ANTHROPIC_API_KEY / OPENROUTER_API_KEY environment variables by
+default and should never be written to this file.
 """
 import json
 import os
@@ -21,6 +21,8 @@ DEFAULTS = {
     "ollama_model": "llama3.1",
     "lmstudio_base_url": "http://localhost:1234/v1",
     "lmstudio_model": "local-model",
+    "openrouter_base_url": "https://openrouter.ai/api/v1",
+    "openrouter_model": "anthropic/claude-3.5-sonnet",
 }
 
 

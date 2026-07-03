@@ -1,14 +1,19 @@
-"""Local LLM provider for Ollama and LM Studio.
+"""Provider for any OpenAI-compatible chat-completions endpoint: Ollama,
+LM Studio, or a hosted router like OpenRouter.
 
-Both expose an OpenAI-compatible /v1/chat/completions endpoint with function
-("tool") calling support -- this provider speaks that wire format directly.
+All three expose /v1/chat/completions with function ("tool") calling support
+-- this provider speaks that wire format directly.
 
-Ollama default endpoint:    http://localhost:11434/v1
-LM Studio default endpoint: http://localhost:1234/v1
+Ollama default endpoint:      http://localhost:11434/v1
+LM Studio default endpoint:   http://localhost:1234/v1
+OpenRouter default endpoint:  https://openrouter.ai/api/v1 (needs an API key
+    from https://openrouter.ai/keys; model IDs look like "vendor/model", e.g.
+    "anthropic/claude-3.5-sonnet" or "openai/gpt-4o")
 
 Use a model that supports tool calling (e.g. llama3.1, qwen2.5, mistral-nemo
-on Ollama; check the model card in LM Studio) -- models without tool-calling
-support will just chat and never call any of the ArcGIS Pro tools.
+on Ollama; check the model card in LM Studio or on OpenRouter) -- models
+without tool-calling support will just chat and never call any of the
+ArcGIS Pro tools.
 """
 import json
 
@@ -18,11 +23,12 @@ from .base import LLMProvider, LLMResponse, ToolCall
 
 
 class LocalOpenAIProvider(LLMProvider):
-    def __init__(self, base_url, model, api_key="not-needed", timeout=180):
+    def __init__(self, base_url, model, api_key="not-needed", timeout=180, extra_headers=None):
         self.base_url = self._normalize_base_url(base_url)
         self.model = model
         self.api_key = api_key
         self.timeout = timeout
+        self.extra_headers = extra_headers or {}
 
     @staticmethod
     def _normalize_base_url(base_url):
@@ -80,6 +86,7 @@ class LocalOpenAIProvider(LLMProvider):
         headers = {"Content-Type": "application/json"}
         if self.api_key and self.api_key != "not-needed":
             headers["Authorization"] = f"Bearer {self.api_key}"
+        headers.update(self.extra_headers)
 
         try:
             resp = requests.post(
@@ -88,23 +95,26 @@ class LocalOpenAIProvider(LLMProvider):
             resp.raise_for_status()
         except requests.RequestException as exc:
             raise RuntimeError(
-                f"Could not reach the local model server at {self.base_url} ({exc}). "
-                "Confirm Ollama/LM Studio is running and its local server is enabled."
+                f"Could not reach the model server at {self.base_url} ({exc}). Confirm "
+                "the server is running/reachable (Ollama, LM Studio) or that the "
+                "endpoint and API key are correct (OpenRouter)."
             ) from exc
 
         data = resp.json()
 
-        # LM Studio / Ollama sometimes return HTTP 200 with an error payload
-        # instead of a normal completion (e.g. no model loaded, wrong model
-        # name, context length exceeded). Surface that clearly instead of
-        # crashing on a missing "choices" key.
+        # LM Studio / Ollama / OpenRouter sometimes return HTTP 200 with an
+        # error payload instead of a normal completion (e.g. no model loaded,
+        # wrong/invalid model name, missing or bad API key, context length
+        # exceeded). Surface that clearly instead of crashing on a missing
+        # "choices" key.
         if "error" in data:
             err = data["error"]
             err_message = err.get("message", err) if isinstance(err, dict) else err
             raise RuntimeError(
-                f"The local model server at {self.base_url} returned an error: "
-                f"{err_message}. Check that a model is loaded in LM Studio / pulled "
-                f"in Ollama, and that the model name '{self.model}' matches it exactly."
+                f"The model server at {self.base_url} returned an error: {err_message}. "
+                f"Check that the model name '{self.model}' is correct (loaded in LM "
+                "Studio / pulled in Ollama / a valid OpenRouter model ID) and, for "
+                "OpenRouter, that the API key is valid."
             )
 
         if "choices" not in data or not data["choices"]:

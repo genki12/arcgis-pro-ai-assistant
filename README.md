@@ -1,9 +1,10 @@
 # ArcGIS Pro AI Assistant
 
 A Python Toolbox (`.pyt`) for ArcGIS Pro that lets you query and modify your
-current project using natural language, backed by Claude (Anthropic API) or a
-local model via Ollama / LM Studio. It runs inside ArcGIS Pro's own Python
-process — no external server, no separate app.
+current project using natural language, backed by Claude (Anthropic API),
+OpenRouter (hosted access to many models), or a local model via Ollama / LM
+Studio. It runs inside ArcGIS Pro's own Python process — no external server,
+no separate app.
 
 ## What it can do
 
@@ -39,27 +40,35 @@ ArcGIS Pro's default Python environment is read-only. Clone it first:
    (or just `pip install anthropic requests`)
 
 If you only plan to use Ollama/LM Studio, `anthropic` isn't required — the
-toolbox lazy-imports it only when you pick the Claude provider.
+toolbox lazy-imports it only when you pick the Claude provider. OpenRouter
+doesn't need it either (it uses `requests`, same as Ollama/LM Studio).
 
-### 2. Set your Anthropic API key (if using Claude)
+### 2. Set your API key (Claude or OpenRouter)
 
-Preferred: set the `ANTHROPIC_API_KEY` environment variable system-wide (or
-run `ant auth login` if you use the Anthropic CLI) so it's picked up
-automatically. Otherwise you can paste a key into the tool's hidden "API key"
-parameter each run — it is not stored anywhere.
+Preferred: set the `ANTHROPIC_API_KEY` (Claude) or `OPENROUTER_API_KEY`
+(OpenRouter) environment variable system-wide so it's picked up automatically.
+Otherwise you can paste a key into the tool's hidden "API key" parameter each
+run — it is never written to disk. Get an OpenRouter key at
+https://openrouter.ai/keys.
 
 ### 3. Add the toolbox to ArcGIS Pro
 
 Catalog pane → right-click **Toolboxes** → **Add Toolbox** → browse to
 `AIAssistant.pyt` in this folder.
 
-### 4. (Optional) Local LLM setup
+### 4. (Optional) Local/hosted model setup
 
 - **Ollama**: install, run `ollama serve`, then pull a tool-calling-capable
   model, e.g. `ollama pull llama3.1`. Default endpoint:
   `http://localhost:11434/v1`.
 - **LM Studio**: load a tool-calling-capable model, enable the local server
   (Developer tab), default endpoint: `http://localhost:1234/v1`.
+- **OpenRouter**: no local server needed — just an API key (above). Default
+  endpoint `https://openrouter.ai/api/v1`; model IDs use the
+  `vendor/model-name` format (e.g. `anthropic/claude-3.5-sonnet`,
+  `openai/gpt-4o`, `meta-llama/llama-3.1-70b-instruct`) — see
+  https://openrouter.ai/models for the full list and check each model's tool
+  ("function calling") support before using it.
 
 Models without tool-calling support will just chat and never actually touch
 ArcGIS Pro.
@@ -72,7 +81,7 @@ Geoprocessing pane → search "Ask AI Assistant" → run it with:
   OWNER = 'Smith'?"*, *"Buffer the Parcels layer by 50 feet and call it
   Parcels_Buffer"*, *"Create a point feature class called Monuments in
   NAD83 California Zone V (WKID 2229) with a TEXT field called Label."*
-- **Provider**: Claude / Ollama / LM Studio.
+- **Provider**: Claude / Ollama / LM Studio / OpenRouter.
 - **Allow destructive actions**: leave unchecked to safely explore/query
   first. Check it (and the model must also pass `confirm=true`) before it
   will create feature classes, insert features, or run arbitrary
@@ -86,9 +95,9 @@ Geoprocessing pane → search "Ask AI Assistant" → run it with:
 - `run_geoprocessing_tool` is a general escape hatch that can call any ArcPy
   geoprocessing function — treat it like giving the model shell access to
   ArcPy. Keep "Allow destructive actions" off unless you trust the request.
-- Nothing here talks to the network except the LLM call itself (Anthropic API
-  or your local Ollama/LM Studio server) — all ArcGIS operations run
-  in-process via arcpy.
+- Nothing here talks to the network except the LLM call itself (Anthropic API,
+  OpenRouter, or your local Ollama/LM Studio server) — all ArcGIS operations
+  run in-process via arcpy.
 
 ## Extending
 

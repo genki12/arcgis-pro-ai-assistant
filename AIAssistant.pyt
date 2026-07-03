@@ -22,8 +22,16 @@ _PROVIDER_LABELS = {
     "anthropic": "Claude (Anthropic API)",
     "ollama": "Ollama (local)",
     "lmstudio": "LM Studio (local)",
+    "openrouter": "OpenRouter (openrouter.ai)",
 }
 _LABEL_TO_KEY = {v: k for k, v in _PROVIDER_LABELS.items()}
+
+# OpenRouter asks apps to identify themselves via these optional headers --
+# not required for the API to work, but good citizenship.
+_OPENROUTER_HEADERS = {
+    "HTTP-Referer": "https://github.com/genki12/arcgis-pro-ai-assistant",
+    "X-Title": "ArcGIS Pro AI Assistant",
+}
 
 
 def build_provider(cfg, provider_label, model_override, api_key, endpoint_override):
@@ -37,6 +45,21 @@ def build_provider(cfg, provider_label, model_override, api_key, endpoint_overri
         )
 
     from ai_assistant.providers.local_openai_provider import LocalOpenAIProvider
+
+    if provider_label.startswith("OpenRouter"):
+        key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "OpenRouter requires an API key. Paste one into the 'API key' "
+                "parameter, or set the OPENROUTER_API_KEY environment variable. "
+                "Get a key at https://openrouter.ai/keys"
+            )
+        return LocalOpenAIProvider(
+            base_url=endpoint_override or cfg["openrouter_base_url"],
+            model=model_override or cfg["openrouter_model"],
+            api_key=key,
+            extra_headers=_OPENROUTER_HEADERS,
+        )
 
     if provider_label.startswith("Ollama"):
         base_url = endpoint_override or cfg["ollama_base_url"]
@@ -55,7 +78,9 @@ def _remembered_model_and_endpoint(cfg, provider_key):
         return cfg["ollama_model"], cfg["ollama_base_url"]
     if provider_key == "lmstudio":
         return cfg["lmstudio_model"], cfg["lmstudio_base_url"]
-    return cfg["anthropic_model"], ""  # Anthropic has no local endpoint
+    if provider_key == "openrouter":
+        return cfg["openrouter_model"], cfg["openrouter_base_url"]
+    return cfg["anthropic_model"], ""  # Anthropic has no server URL of its own
 
 
 def _provider_parameters(cfg):
@@ -86,7 +111,8 @@ def _provider_parameters(cfg):
     model.value = remembered_model
 
     api_key = arcpy.Parameter(
-        displayName="Anthropic API key (optional if ANTHROPIC_API_KEY is set)",
+        displayName="API key (Claude or OpenRouter only -- optional if "
+        "ANTHROPIC_API_KEY / OPENROUTER_API_KEY is set)",
         name="api_key",
         datatype="GPStringHidden",
         parameterType="Optional",
@@ -94,7 +120,7 @@ def _provider_parameters(cfg):
     )
 
     endpoint = arcpy.Parameter(
-        displayName="Local server URL (remembered from last successful test)",
+        displayName="Server URL (Ollama / LM Studio / OpenRouter, remembered from last successful test)",
         name="endpoint",
         datatype="GPString",
         parameterType="Optional",
@@ -117,7 +143,7 @@ class AskAssistant(object):
         self.label = "Ask AI Assistant"
         self.description = (
             "Query or modify the current ArcGIS Pro project using natural language, "
-            "via Claude (Anthropic API) or a local Ollama/LM Studio model."
+            "via Claude (Anthropic API), OpenRouter, or a local Ollama/LM Studio model."
         )
         self.canRunInBackground = False
 
@@ -207,8 +233,8 @@ class AskAssistant(object):
 
 class TestProvider(object):
     """A quick 'Test Provider' check: sends one tiny message, no ArcGIS Pro tools
-    involved, so you can confirm Claude/Ollama/LM Studio is reachable and correctly
-    configured before running a real request."""
+    involved, so you can confirm Claude/Ollama/LM Studio/OpenRouter is reachable and
+    correctly configured before running a real request."""
 
     def __init__(self):
         self.label = "Test AI Provider Connection"
@@ -272,6 +298,9 @@ class TestProvider(object):
         elif provider_key == "ollama":
             cfg["ollama_model"] = provider.model
             cfg["ollama_base_url"] = provider.base_url
+        elif provider_key == "openrouter":
+            cfg["openrouter_model"] = provider.model
+            cfg["openrouter_base_url"] = provider.base_url
         else:
             cfg["lmstudio_model"] = provider.model
             cfg["lmstudio_base_url"] = provider.base_url
