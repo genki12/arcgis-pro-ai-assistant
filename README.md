@@ -14,8 +14,9 @@ Runs a tool-use loop against your **currently open project and active map**:
   attribute queries (`WHERE` clauses), select features by attribute.
 - **Create / modify** (gated behind a checkbox + explicit confirmation):
   create feature classes, insert features (geometry + attributes), buffer a
-  layer, add existing data to the map, or run *any* ArcPy geoprocessing tool
-  by toolbox alias + tool name.
+  layer, add existing data to the map, run *any* ArcPy geoprocessing tool by
+  toolbox alias + tool name, or bulk-import a "Reliability Inspection Form
+  V6.1" Excel file (see below).
 
 Each run is one request → the model may call several tools in sequence → a
 final plain-language summary, all logged to the Geoprocessing results pane.
@@ -42,6 +43,8 @@ ArcGIS Pro's default Python environment is read-only. Clone it first:
 If you only plan to use Ollama/LM Studio, `anthropic` isn't required — the
 toolbox lazy-imports it only when you pick the Claude provider. OpenRouter
 doesn't need it either (it uses `requests`, same as Ollama/LM Studio).
+`openpyxl` is only needed if you use `import_reliability_form`; it's also
+lazy-imported, with a clear error telling you to install it if it's missing.
 
 ### 2. Set your API key (Claude or OpenRouter)
 
@@ -86,6 +89,42 @@ Geoprocessing pane → search "Ask AI Assistant" → run it with:
   first. Check it (and the model must also pass `confirm=true`) before it
   will create feature classes, insert features, or run arbitrary
   geoprocessing tools.
+
+## Reliability Inspection Form import
+
+`import_reliability_form` bulk-loads a "Reliability Inspection Form V6.1"
+Excel file (the multi-hundred-row pole inspection spreadsheet) into the
+project's default geodatabase as two related tables:
+
+- **`Inspection_Jobs`** — one row per import, with the job-level info from
+  the form's header (Project ID, inspection date, jurisdiction, region,
+  network, substation, feeder, device ID/type, inspector, cost estimates,
+  and which source file it came from).
+- **`Pole_Inspections`** — a point feature class, one row per pole/structure,
+  with all the condition fields (pole type, bad pole/crossarm/insulators/
+  guys/anchors, arresters, fuses, grounds, conductor damage, work type,
+  reliability override, comments, etc.), related back to its job via
+  `ProjectID`.
+
+Both tables accumulate across runs — importing a second form appends to the
+same two tables rather than overwriting them, so the tool is reusable across
+many inspection jobs over time.
+
+**Only poles with GPS coordinates filled in get placed on the map** — many
+real-world forms only have coordinates for a handful of rows. Rows without
+coordinates are skipped and the count is reported back (e.g. "50 imported,
+450 skipped — no GPS"), not silently dropped. The "Work Totals" labor/cost-
+estimating columns on the far right of the form (Set-up Units, Traffic
+Control units, Conductor Handling units) are intentionally not imported —
+this only carries pole condition data.
+
+Example request: *"Import the reliability form at
+C:\Users\name\Downloads\Reliability Inspection Form V6.1.xlsx"* (with "Allow
+destructive actions" checked, since this creates/writes geodatabase data).
+
+If a future form revision moves columns around, the field mapping is in
+`ai_assistant/tools/arcpy_tools.py` (`_JOB_HEADER_CELLS` / `_POLE_FIELDS`) —
+update the column letters there.
 
 ## Notes on safety
 

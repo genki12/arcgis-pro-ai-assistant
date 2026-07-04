@@ -2,7 +2,12 @@
 from ..providers.base import ToolDef
 from . import arcpy_tools as impl
 
-DESTRUCTIVE_TOOLS = {"create_feature_class", "add_features", "run_geoprocessing_tool"}
+DESTRUCTIVE_TOOLS = {
+    "create_feature_class",
+    "add_features",
+    "run_geoprocessing_tool",
+    "import_reliability_form",
+}
 
 
 def build_tool_defs(allow_destructive):
@@ -304,6 +309,33 @@ def build_tool_defs(allow_destructive):
             "save_project",
             "Save the current ArcGIS Pro project (.aprx) to disk.",
             {"type": "object", "properties": {}, "required": []},
+        ),
+        ToolDef(
+            "import_reliability_form",
+            "Bulk-import a 'Reliability Inspection Form V6.1' Excel file into the "
+            "project's default geodatabase: creates/appends an 'Inspection_Jobs' table "
+            "(one row per job -- Project ID, date, region, feeder, substation, "
+            "inspector, device) and a 'Pole_Inspections' point feature class (one row "
+            "per pole, related by Project ID). Only poles with GPS coordinates filled "
+            "in are placed on the map; poles without coordinates are skipped and "
+            "reported in the result. Destructive: creates/writes geodatabase data.",
+            {
+                "type": "object",
+                "properties": {
+                    "xlsx_path": {
+                        "type": "string",
+                        "description": "Full path to the .xlsx file, e.g. "
+                        "C:\\Users\\name\\Downloads\\Reliability Inspection Form V6.1.xlsx",
+                    },
+                    "sheet_name": {
+                        "type": "string",
+                        "description": "Worksheet name to read.",
+                        "default": "Reliability Form",
+                    },
+                    "confirm": {"type": "boolean", "default": False},
+                },
+                "required": ["xlsx_path", "confirm"],
+            },
         ),
     ]
 
