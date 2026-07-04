@@ -10,6 +10,15 @@ _THIS_DIR = os.path.dirname(__file__)
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
+# ArcGIS Pro's Python process stays alive for the whole session, so plain
+# `import` would keep serving whatever version of ai_assistant.* was cached
+# from the first time this toolbox ran -- edits to the .py files on disk
+# would be silently ignored until you restart ArcGIS Pro. Force a fresh
+# import every time this .pyt is loaded instead.
+for _mod_name in list(sys.modules):
+    if _mod_name == "ai_assistant" or _mod_name.startswith("ai_assistant."):
+        del sys.modules[_mod_name]
+
 import arcpy
 
 from ai_assistant import config as cfg_mod
