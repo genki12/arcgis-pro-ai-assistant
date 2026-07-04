@@ -135,7 +135,7 @@ class Toolbox(object):
     def __init__(self):
         self.label = "AI Assistant"
         self.alias = "aiassistant"
-        self.tools = [AskAssistant, TestProvider]
+        self.tools = [AskAssistant, TestProvider, ImportReliabilityForm]
 
 
 class AskAssistant(object):
@@ -305,3 +305,63 @@ class TestProvider(object):
             cfg["lmstudio_model"] = provider.model
             cfg["lmstudio_base_url"] = provider.base_url
         cfg_mod.save(cfg)
+
+
+class ImportReliabilityForm(object):
+    """A plain, deterministic import -- no LLM involved. Runs the exact same
+    arcpy code as the AI Assistant's import_reliability_form tool, just
+    triggered directly instead of via a model deciding to call it. Use this
+    when you want a guaranteed-correct run regardless of which AI provider
+    or model you have configured."""
+
+    def __init__(self):
+        self.label = "Import Reliability Form"
+        self.description = (
+            "Bulk-import a 'Reliability Inspection Form V6.1' Excel file into the "
+            "project's default geodatabase: creates/appends an Inspection_Jobs table "
+            "and a Pole_Inspections point feature class (points placed from the "
+            "form's GPS coordinates; rows without coordinates are skipped and counted)."
+        )
+        self.canRunInBackground = False
+
+    def getParameterInfo(self):
+        xlsx_path = arcpy.Parameter(
+            displayName="Reliability Inspection Form (.xlsx)",
+            name="xlsx_path",
+            datatype="DEFile",
+            parameterType="Required",
+            direction="Input",
+        )
+        xlsx_path.filter.list = ["xlsx"]
+
+        sheet_name = arcpy.Parameter(
+            displayName="Sheet name",
+            name="sheet_name",
+            datatype="GPString",
+            parameterType="Optional",
+            direction="Input",
+        )
+        sheet_name.value = "Reliability Form"
+
+        return [xlsx_path, sheet_name]
+
+    def execute(self, parameters, messages):
+        xlsx_path = parameters[0].valueAsText
+        sheet_name = parameters[1].valueAsText or "Reliability Form"
+
+        from ai_assistant.tools import arcpy_tools
+
+        try:
+            result = arcpy_tools.import_reliability_form(xlsx_path, sheet_name)
+        except (RuntimeError, ValueError) as exc:
+            arcpy.AddError(str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001 - surface arcpy errors plainly
+            arcpy.AddError(f"{type(exc).__name__}: {exc}")
+            return
+
+        arcpy.AddMessage(f"Project ID: {result['project_id']}")
+        arcpy.AddMessage(f"Poles imported (had GPS): {result['poles_imported']}")
+        arcpy.AddMessage(f"Poles skipped (no GPS): {result['poles_skipped_no_gps']}")
+        arcpy.AddMessage(f"Jobs table: {result['jobs_table']}")
+        arcpy.AddMessage(f"Poles feature class: {result['poles_feature_class']}")

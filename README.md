@@ -92,9 +92,21 @@ Geoprocessing pane → search "Ask AI Assistant" → run it with:
 
 ## Reliability Inspection Form import
 
-`import_reliability_form` bulk-loads a "Reliability Inspection Form V6.1"
-Excel file (the multi-hundred-row pole inspection spreadsheet) into the
-project's default geodatabase as two related tables:
+There are **two ways to run this import** — pick whichever fits:
+
+- **"Import Reliability Form"** — a plain geoprocessing tool in the same
+  toolbox (Catalog pane, no AI involved). Browse to the `.xlsx`, click Run.
+  Deterministic and immune to a model picking the wrong tool — recommended
+  if you're using a small/local model, or just want a guaranteed-correct run.
+- **Ask the AI Assistant** — e.g. *"Import the reliability form at
+  C:\...\form.xlsx"*. Convenient, but tool selection quality depends on the
+  model: small local models (4B-ish parameter range) can occasionally call
+  the wrong tool (e.g. the generic `add_data_to_map` instead of this one) —
+  Claude or larger hosted models are much more reliable here.
+
+Both call the exact same underlying logic. It bulk-loads a "Reliability
+Inspection Form V6.1" Excel file (the multi-hundred-row pole inspection
+spreadsheet) into the project's default geodatabase as two related tables:
 
 - **`Inspection_Jobs`** — one row per import, with the job-level info from
   the form's header (Project ID, inspection date, jurisdiction, region,
