@@ -1,3 +1,6 @@
 anthropic
 requests
 openpyxl
+mcp
+uvicorn
+starlette

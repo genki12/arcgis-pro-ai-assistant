@@ -45,6 +45,8 @@ toolbox lazy-imports it only when you pick the Claude provider. OpenRouter
 doesn't need it either (it uses `requests`, same as Ollama/LM Studio).
 `openpyxl` is only needed if you use `import_reliability_form`; it's also
 lazy-imported, with a clear error telling you to install it if it's missing.
+`mcp`, `uvicorn`, and `starlette` are only needed for **Start MCP Server**
+(see below) — everything else works without them.
 
 ### 2. Set your API key (Claude or OpenRouter)
 
@@ -137,6 +139,57 @@ destructive actions" checked, since this creates/writes geodatabase data).
 If a future form revision moves columns around, the field mapping is in
 `ai_assistant/tools/arcpy_tools.py` (`_JOB_HEADER_CELLS` / `_POLE_FIELDS`) —
 update the column letters there.
+
+## Using Claude Desktop instead of "Ask AI Assistant"
+
+Claude Desktop can't be plugged in as just another provider (unlike Ollama/LM
+Studio/OpenRouter) — it's a chat app, not something with a local API server
+other programs can call into. What it *can* do is connect **out** to an MCP
+(Model Context Protocol) server and use its tools inside a normal
+conversation. **"Start MCP Server"** turns this toolbox into exactly that:
+run it once, and Claude Desktop gets live access to the same tools as "Ask
+AI Assistant" — query, edit, run any geoprocessing tool, everything — for
+the rest of your ArcGIS Pro session, without you clicking Run each time.
+
+### Setup
+
+1. Run **Start MCP Server** (Port defaults to 8765; leave "Allow destructive
+   actions" unchecked at first to try it safely).
+2. It prints the exact JSON to add. **Node.js is required** on the Claude
+   Desktop side (for the `npx mcp-remote` bridge — Claude Desktop only
+   speaks MCP over stdio, not HTTP directly). Install Node.js from
+   nodejs.org if you don't have it.
+3. Open `claude_desktop_config.json`:
+   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+4. Add the printed entry, e.g.:
+   ```json
+   {
+     "mcpServers": {
+       "arcgis-pro-ai-assistant": {
+         "command": "npx",
+         "args": ["mcp-remote", "http://127.0.0.1:8765/mcp"]
+       }
+     }
+   }
+   ```
+   (merge with any existing `mcpServers` entries — don't overwrite them)
+5. Restart Claude Desktop. Start a new conversation and ask it to do
+   something with your ArcGIS Pro project — it now has the tools available.
+
+### Things to know
+
+- **Localhost only.** The server only binds to `127.0.0.1` — nothing outside
+  this machine can reach it.
+- **Destructive actions are fixed at server-start time**, not per-request
+  like "Ask AI Assistant" — there's no per-message checkbox in a Claude
+  Desktop conversation, so decide once when you run "Start MCP Server".
+  Individual destructive tool calls still need `confirm: true`, same as
+  always.
+- **No stop button yet.** The server runs for the rest of this ArcGIS Pro
+  session — restart ArcGIS Pro to stop it or change its port/settings.
+- If you edit this toolbox's code while a server is already running, restart
+  ArcGIS Pro to pick up the changes in that running server (it keeps using
+  whatever code was loaded when you started it).
 
 ## Notes on safety
 

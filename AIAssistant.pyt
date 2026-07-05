@@ -3,6 +3,7 @@
 Add this file via Catalog pane > Toolboxes > Add Toolbox, then run
 "Ask AI Assistant" from the Geoprocessing pane. See README.md for setup.
 """
+import json
 import os
 import sys
 
@@ -15,7 +16,13 @@ if _THIS_DIR not in sys.path:
 # from the first time this toolbox ran -- edits to the .py files on disk
 # would be silently ignored until you restart ArcGIS Pro. Force a fresh
 # import every time this .pyt is loaded instead.
+# Exception: ai_assistant.mcp_server deliberately holds process-lifetime
+# state (whether a background MCP server thread is already running) --
+# purging it would make "Start MCP Server" forget an already-running server
+# and try to rebind the same port on every subsequent tool run.
 for _mod_name in list(sys.modules):
+    if _mod_name == "ai_assistant.mcp_server":
+        continue
     if _mod_name == "ai_assistant" or _mod_name.startswith("ai_assistant."):
         del sys.modules[_mod_name]
 
@@ -144,7 +151,7 @@ class Toolbox(object):
     def __init__(self):
         self.label = "AI Assistant"
         self.alias = "aiassistant"
-        self.tools = [AskAssistant, TestProvider, ImportReliabilityForm]
+        self.tools = [AskAssistant, TestProvider, ImportReliabilityForm, StartMcpServer]
 
 
 class AskAssistant(object):
@@ -374,3 +381,77 @@ class ImportReliabilityForm(object):
         arcpy.AddMessage(f"Poles skipped (no GPS): {result['poles_skipped_no_gps']}")
         arcpy.AddMessage(f"Jobs table: {result['jobs_table']}")
         arcpy.AddMessage(f"Poles feature class: {result['poles_feature_class']}")
+
+
+class StartMcpServer(object):
+    """Exposes the AI Assistant's tools as an MCP server, so Claude Desktop
+    can drive this ArcGIS Pro session directly in a normal conversation,
+    instead of running "Ask AI Assistant" one request at a time."""
+
+    def __init__(self):
+        self.label = "Start MCP Server (for Claude Desktop)"
+        self.description = (
+            "Starts a local MCP server exposing this session's tools, so you can "
+            "drive this ArcGIS Pro project directly from a Claude Desktop "
+            "conversation. Runs on localhost only, for the rest of this ArcGIS "
+            "Pro session. Requires Node.js (npx) on the Claude Desktop side -- "
+            "see README.md for the exact claude_desktop_config.json entry to add."
+        )
+        self.canRunInBackground = False
+
+    def getParameterInfo(self):
+        port = arcpy.Parameter(
+            displayName="Port",
+            name="port",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input",
+        )
+        port.value = 8765
+
+        allow_destructive = arcpy.Parameter(
+            displayName="Allow destructive actions for this server's lifetime "
+            "(create/insert features, run geoprocessing tools)",
+            name="allow_destructive",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input",
+        )
+        allow_destructive.value = False
+
+        return [port, allow_destructive]
+
+    def execute(self, parameters, messages):
+        port = int(parameters[0].value)
+        allow_destructive = bool(parameters[1].value)
+
+        from ai_assistant import mcp_server
+
+        try:
+            info = mcp_server.start(port=port, allow_destructive=allow_destructive)
+        except RuntimeError as exc:
+            arcpy.AddError(str(exc))
+            return
+
+        arcpy.AddMessage(f"MCP server running at {info['url']}")
+        arcpy.AddMessage(f"Destructive actions allowed: {info['allow_destructive']}")
+        arcpy.AddMessage("")
+        arcpy.AddMessage(
+            "Add this to claude_desktop_config.json (see README.md), then "
+            "restart Claude Desktop:"
+        )
+        arcpy.AddMessage(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "arcgis-pro-ai-assistant": {
+                            "command": "npx",
+                            "args": ["mcp-remote", info["url"]],
+                        }
+                    }
+                },
+                indent=2,
+            )
+        )
+        arcpy.AddMessage("")
+        arcpy.AddMessage("This server keeps running for the rest of this ArcGIS Pro session.")
