@@ -15,6 +15,7 @@ ArcGIS Pro session. Restart ArcGIS Pro to stop it or change its settings.
 import json
 import threading
 
+from .tools import arcpy_tools
 from .tools.registry import build_tool_defs, dispatch
 
 _state = {"thread": None, "port": None}
@@ -24,12 +25,20 @@ def is_running():
     return _state["thread"] is not None and _state["thread"].is_alive()
 
 
-def start(port=8765, allow_destructive=False, host="127.0.0.1"):
+def start(port=8765, allow_destructive=False, host="127.0.0.1", project=None):
+    """`project` must be an arcpy.mp.ArcGISProject captured synchronously by
+    the caller (e.g. arcpy.mp.ArcGISProject("CURRENT") called from inside a
+    GP tool's execute()) -- "CURRENT" itself only resolves on that thread,
+    not on the background thread this server runs on. See arcpy_tools.py's
+    set_current_project() docstring for the full explanation."""
     if is_running():
         raise RuntimeError(
             f"An MCP server is already running on port {_state['port']}. "
             "Restart ArcGIS Pro to change the port or the destructive-actions setting."
         )
+
+    if project is not None:
+        arcpy_tools.set_current_project(project)
 
     try:
         import mcp.types as types

@@ -427,8 +427,16 @@ class StartMcpServer(object):
 
         from ai_assistant import mcp_server
 
+        # arcpy.mp.ArcGISProject("CURRENT") only resolves on this thread,
+        # right now, inside this GP tool's execute() -- it raises
+        # OSError("CURRENT") from the server's background thread. Capture it
+        # here, synchronously, and hand it to the server to reuse.
+        current_project = arcpy.mp.ArcGISProject("CURRENT")
+
         try:
-            info = mcp_server.start(port=port, allow_destructive=allow_destructive)
+            info = mcp_server.start(
+                port=port, allow_destructive=allow_destructive, project=current_project
+            )
         except RuntimeError as exc:
             arcpy.AddError(str(exc))
             return

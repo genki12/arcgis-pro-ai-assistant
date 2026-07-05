@@ -8,9 +8,30 @@ import re
 
 import arcpy
 
+# arcpy.mp.ArcGISProject("CURRENT") only resolves when called synchronously
+# from ArcGIS Pro's own script-tool execution context (the thread a GP tool's
+# execute() runs on) -- it raises OSError("CURRENT") from any other thread,
+# including the background thread the MCP server runs on. mcp_server.py
+# captures the project once, synchronously, while still in a valid context
+# (inside StartMcpServer.execute(), before spawning the server thread) and
+# injects it here via set_current_project() so later background-thread tool
+# calls reuse that reference instead of re-resolving CURRENT.
+_injected_aprx = None
+
+
+def set_current_project(aprx):
+    global _injected_aprx
+    _injected_aprx = aprx
+
+
+def _current_project():
+    if _injected_aprx is not None:
+        return _injected_aprx
+    return arcpy.mp.ArcGISProject("CURRENT")
+
 
 def _current_map():
-    aprx = arcpy.mp.ArcGISProject("CURRENT")
+    aprx = _current_project()
     m = aprx.activeMap
     if m is None:
         raise RuntimeError("No active map. Open a map view in ArcGIS Pro first.")
@@ -142,10 +163,6 @@ def run_geoprocessing_tool(toolbox_alias, tool_name, parameters):
 # don't reach: which maps and layouts exist, layer visibility, camera/zoom,
 # bookmarks, and exporting a map or layout to an image/PDF.
 # ---------------------------------------------------------------------------
-
-def _current_project():
-    return arcpy.mp.ArcGISProject("CURRENT")
-
 
 def _find_map(aprx, map_name):
     for m in aprx.listMaps():
